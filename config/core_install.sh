@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Run this after copying a fresh compass file system image
+# Run this after copying a fresh raspbian file system image
 #
 # Uncomment this statement for debug echos
 #DEBUG=1
@@ -10,7 +10,7 @@ UDR_INSTALL_LOGFILE="/var/log/udr_install.log"
 
 #DIREWOLF SOURCE VERSION to build
 #DW_VER="1.5"
-DW_VER="direwolf-dev"
+DW_VER="dev"
 
 # do upgrade, update outside of script since it can take some time
 UPDATE_NOW=false
@@ -21,7 +21,8 @@ NONESSENTIAL_PKG_LIST="mg jed whois"
 # set this to true if you even want non essential packages installed
 NONESSENTIAL_PKG=true
 
-BUILDTOOLS_PKG_LIST="rsync build-essential autoconf dh-autoreconf automake libtool git libasound2-dev libncurses5-dev libncursesw5-dev"
+# Required packages
+BUILDTOOLS_PKG_LIST="rsync build-essential autoconf dh-autoreconf automake libtool git libasound2-dev libncurses5 libncurses5-dev libncursesw5-dev libudev-dev bc"
 
 # If the following is set to true, bluetooth will be disabled
 SERIAL_CONSOLE=false
@@ -237,7 +238,9 @@ if [ $? -ne 0 ] ; then
     # Add to bottom of file
     cat << EOT >> /boot/config.txt
 
-# enable udrc/draws if no eeprom
+# Flush all overlays, ie. deprecated overlays loaded from eeprom
+dtoverlay=
+# enable udrc/draws
 $set_dtoverlay
 force_turbo=1
 EOT
@@ -403,9 +406,27 @@ else
 fi
 echo " === time sync after: $(date)"
 
-echo "$(date "+%Y %m %d %T %Z"): $scriptname: core install script FINISHED" >> $UDR_INSTALL_LOGFILE
-echo
-echo "core install script FINISHED"
+echo "$scriptname: Install sensor support"
+sudo apt-get -y install lm-sensors
+
+# Does DRAWS sensor file name exist?
+sensor_fname="/etc/sensors.d/draws"
+if [ ! -e "$sensor_fname" ] ; then
+
+cat  > $sensor_fname <<EOF
+chip "ads1015-*"
+	label in3 "User ADC Differential"
+        label in4 "+12V"
+	label in6 "User ADC 1"
+	label in7 "User ADC 2"
+	compute in4 ((48.7/10)+1)*@, @/((48.7/10)+1)
+EOF
+fi
+
+apt-get clean
+apt-get -y autoremove
+
+echo "$(date "+%Y %m %d %T %Z"): $scriptname: core install script FINISHED" | sudo tee -a $UDR_INSTALL_LOGFILE
 echo
 cd $START_DIR
 /bin/bash $START_DIR/app_install.sh core

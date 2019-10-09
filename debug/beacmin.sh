@@ -3,6 +3,7 @@
 # beacmin.sh
 #
 # Minimal APRS beacon of position data from GPS
+# If a GPS is not found then a canned position is beaconed.
 #
 # Uncomment this statement for debug echos
 #DEBUG=1
@@ -10,10 +11,13 @@
 SID=15
 AX25PORT=udr0
 
+scriptname="`basename $0`"
 BEACON="/usr/local/sbin/beacon"
 NULL_CALLSIGN="NOONE"
 CALLSIGN="$NULL_CALLSIGN"
-SEQUENCE_FILE="/home/pi/tmp/sequence.tmp"
+USER="$(whoami)"
+TMPDIR="/home/$USER/tmp"
+SEQUENCE_FILE="$TMPDIR/sequence.tmp"
 AXPORTS_FILE="/etc/ax25/axports"
 
 # boolean for using gpsd sentence instead of nmea sentence
@@ -27,6 +31,45 @@ londir="W"
 # ===== function dbgecho
 function dbgecho { if [ ! -z "$DEBUG" ] ; then echo "$*"; fi }
 
+# ===== function is_draws
+# Determine if a NWDR DRAWS hat is installed
+function is_draws() {
+    retval=1
+    firmware_prod_idfile="/sys/firmware/devicetree/base/hat/product_id"
+    UDRC_ID="$(tr -d '\0' < $firmware_prod_idfile)"
+    #get last character in product id file
+    UDRC_ID=${UDRC_ID: -1}
+    if [ "$UDRC_ID" -eq 4 ] ; then
+        retval=0
+    fi
+    return $retval
+}
+
+# ===== function is_gpsd
+# Check if gpsd has been installed
+function is_gpsd() {
+    dbgecho "is_gpsd"
+    systemctl --no-pager status gpsd > /dev/null 2>&1
+    return $?
+}
+
+# ===== function is_gps_sentence
+# Check if gpsd is returning sentences
+# Returns gps sentence count, should be 3
+function is_gps_sentence() {
+    dbgecho "is_gps_sentence"
+    retval=$(gpspipe -r -n 3 -x 2 | grep -ic "class")
+    return $retval
+}
+
+# ===== function set_canned_location
+function set_canned_location() {
+    lat="4830.00"
+    latdir="N"
+    lon="12250.00"
+    londir="W"
+}
+
 # ===== function get_lat_lon_nmeasentence
 # Much easier to parse a nmea sentence &
 # convert to aprs format than a gpsd sentence
@@ -38,12 +81,12 @@ function get_lat_lon_nmeasentence() {
     ll_valid=$(echo $gpsdata | cut -d',' -f7)
     dbgecho "Status: $ll_valid"
     if [ "$ll_valid" != "A" ] ; then
-        echo "GPS data not valid, exiting "
+        echo "GPS data not valid"
         echo "gps data: $gpsdata"
-        return 1
+       return 1
     fi
 
-    dbgecho "gpsdata: $gpsdata"
+    dbgecho "gps data: $gpsdata"
 
     # Separate lat, lon & position direction
     lat=$(echo $gpsdata | cut -d',' -f2)
@@ -116,44 +159,78 @@ function callsign_axports () {
    fi
 }
 
+# ===== function is_ax25up
+function is_ax25up() {
+  ip a show ax0 up > /dev/null  2>&1
+}
+
+
 # ===== main
 
-# Check if program to get lat/lon info is installed.
-prog_name="gpspipe"
-type -P $prog_name &> /dev/null
-if [ $? -ne 0 ] ; then
-    echo "$scriptname: Installing gpsd-clients package"
-    sudo apt-get install -y -q gpsd-clients
+if [[ $# -gt 0 ]] ; then
+    echo "$scriptname: does NOT take any arguments."
 fi
 
-# Choose between using gpsd sentences or nmea sentences
-if $b_gpsdsentence ; then
-    prog_name="bc"
+# Check if AX.25 port ax0 exists & is up
+if ! is_ax25up ; then
+    echo "$scriptname: AX.25 port not found, is AX.25 configured?"
+    exit 1
+fi
+
+# Don't bother looking for gpspipe if gpsd is not installed
+
+if is_gpsd && is_draws ; then
+    # Check if program to get lat/lon info is installed.
+    prog_name="gpspipe"
     type -P $prog_name &> /dev/null
     if [ $? -ne 0 ] ; then
-        echo "$scriptname: Installing $prog_name package"
-        sudo apt-get install -y -q $prog_name
+        echo "$scriptname: Installing gpsd-clients package"
+        sudo apt-get install gpsd-clients
     fi
 
-    # echo "gpsd sentence"
-    get_lat_lon_gpsdsentence
+    # Verify gpsd is returning sentences
+    if [ $(is_gps_sentence) > 0 ] ; then
+        gps_running=true
+        # Choose between using gpsd sentences or nmea sentences
+        if $b_gpsdsentence ; then
+            prog_name="bc"
+            type -P $prog_name &> /dev/null
+            if [ $? -ne 0 ] ; then
+                echo "$scriptname: Installing $prog_name package"
+                sudo apt-get install -y -q $prog_name
+            fi
+        else
+            # echo "nmea sentence"
+            get_lat_lon_nmeasentence
+            if [ "$?" -ne 0 ] ; then
+                echo "Read Invalid gps data read from gpsd, using canned values"
+                set_canned_location
+            fi
+        fi
+    else
+        dbgecho "gpsd is installed but not returning sentences."
+    fi
 else
-
-    # echo "nmea sentence"
-    get_lat_lon_nmeasentence
-    if [ "$?" -ne 0 ] ; then
-        echo "Invalid gps data"
-        exit 1
-    fi
+    # gpsd not running or no DRAWS hat found
+    echo "gpsd not running or no DRAWS hat found, using static lat/lon values"
+    set_canned_location
 fi
-
 
 timestamp=$(date "+%d %T %Z")
 
 seqnum=0
+
+# Test if temporary directory for SEQUENCE_FILE exists
+if [ ! -d "$TMPDIR" ] ; then
+   dbgecho "Directory: $TMPDIR does not exist, making ..."
+   mkdir -p "$TMPDIR"
+fi
+
 # get sequence number
 if [ -e $SEQUENCE_FILE ] ; then
    seqnum=`cat $SEQUENCE_FILE`
+else
+   echo "0" > $SEQUENCE_FILE
 fi
 
 # Check if the callsign & ax25 port have been manually set
@@ -175,8 +252,10 @@ if [ -z "$DEBUG" ] ; then
         echo "Beacon command failed."
     fi
 else
-    echo "Debug set, beacon not actually sent."
+    echo "$scriptname: Debug set, beacon not actually sent."
 fi
 # increment sequence number
 ((seqnum++))
 echo $seqnum > $SEQUENCE_FILE
+
+exit 0

@@ -77,9 +77,11 @@ js8call_rootver="$1"
 js8call_ver="$js8call_rootver"
 download_filename="js8call_${js8call_ver}_armhf.deb"
 
-PKG_REQUIRE_JS8CALL="libqgsttools-p1 libqt5multimedia5 libqt5multimedia5-plugins libqt5multimediaquick-p5 libqt5multimediawidgets5 libqt5qml5 libqt5quick5 libqt5serialport5"
+# This package does not exist in buster: libqgsttools-p1
+PKG_REQUIRE_JS8CALL="libqt5multimedia5 libqt5multimedia5-plugins libqt5multimediaquick5 libqt5multimediawidgets5 libqt5qml5 libqt5quick5 libqt5serialport5 libgfortran3"
 echo "Install js8call ver: $js8call_ver"
 cd "$SRC_DIR"
+sudo apt-get -qq install -y $PKG_REQUIRE_JS8CALL
 
 if [ ! -e "$SRC_DIR/$download_filename" ] ; then
 #    sudo wget https://s3.amazonaws.com/js8call/${js8call_rootver}/$download_filename
@@ -88,11 +90,9 @@ if [ ! -e "$SRC_DIR/$download_filename" ] ; then
         echo "$(tput setaf 1)FAILED to download file: $download_filename $(tput setaf 7)"
         exit 1
     else
-        sudo apt-get -qq install -y $PKG_REQUIRE_JS8CALL
         sudo dpkg -i $download_filename
     fi
 else
-    sudo apt-get -qq install -y $PKG_REQUIRE_JS8CALL
     sudo dpkg -i $download_filename
 fi
 
@@ -149,7 +149,7 @@ if [ ! -d "$HAMLIB_SRC_DIR/tests" ] ; then
             cd hamlib-$hamlib_ver
             ./configure --prefix=/usr/local --enable-static
             echo -e "\n$(tput setaf 4)Starting hamlib build $(tput setaf 7)\n"
-            make
+            make -j$num_cores
             echo -e "\n$(tput setaf 4)Starting hamlib install $(tput setaf 7)\n"
             sudo make install
             sudo ldconfig
@@ -161,12 +161,30 @@ else
 fi
 }
 
+# ===== function build_fldigi_src
+
+function build_fldigi_src() {
+    sudo apt-get build-dep fldigi
+    sudo tar -zxvsf $download_filename
+    sudo chown -R $USER:$USER $FLDIGI_SRC_DIR
+    cd fldigi-$fldigi_ver
+
+    ./configure --with-hamlib --with-flxmlrpc --prefix=/usr/local --enable-static
+    echo -e "\n$(tput setaf 4)Starting fldigi build $(tput setaf 7)\n"
+    make -j$num_cores
+    echo -e "\n$(tput setaf 4)Starting fldigi install $(tput setaf 7)\n"
+    sudo make install
+    sudo ldconfig
+}
+
 # ===== function build_fldigi
 
 function build_fldigi() {
 
 fldigi_ver="$1"
 echo "Install fldigi ver: $fldigi_ver"
+cd $SRC_DIR
+
 download_filename="fldigi-$fldigi_ver.tar.gz"
 
 FLDIGI_SRC_DIR=$SRC_DIR/fldigi-$fldigi_ver
@@ -174,7 +192,7 @@ FLDIGI_SRC_DIR=$SRC_DIR/fldigi-$fldigi_ver
 # fldigi takes a long time to build,
 #  check if there is a previous installation
 
-PKG_REQUIRE_FLDIGI="libfltk1.3-dev libjpeg9-dev libxft-dev libxinerama-dev libxcursor-dev libsndfile1-dev libsamplerate0-dev portaudio19-dev libusb-1.0-0-dev libpulse-dev"
+PKG_REQUIRE_FLDIGI="libfltk1.3-dev libjpeg9-dev libxft-dev libxinerama-dev libxcursor-dev libsndfile1-dev libsamplerate0-dev portaudio19-dev libusb-1.0-0-dev libpulse-dev libmbedtls-dev"
 sudo apt-get install -y $PKG_REQUIRE_FLDIGI
 
 if [ ! -d "$FLDIGI_SRC_DIR" ] ; then
@@ -187,19 +205,25 @@ if [ ! -d "$FLDIGI_SRC_DIR" ] ; then
         echo "$(tput setaf 1)FAILED to download file: $download_filename $(tput setaf 7)"
         exit 1
     else
-        sudo apt-get build-dep fldigi
-        sudo tar -zxvsf $download_filename
-        sudo chown -R $USER:$USER $FLDIGI_SRC_DIR
-        cd fldigi-$fldigi_ver
-
-        ./configure --with-hamlib --with-flxmlrpc
-        echo -e "\n$(tput setaf 4)Starting fldigi build $(tput setaf 7)\n"
-        make
-        echo -e "\n$(tput setaf 4)Starting fldigi install $(tput setaf 7)\n"
-        sudo make install
-        sudo ldconfig
+        build_fldigi_src
     fi
+else
+    build_fldigi_src
 fi
+}
+
+# ===== function build_flapp_src
+
+function build_flapp_src() {
+    sudo tar -zxvf $download_filename
+    sudo chown -R $USER:$USER $FLAPP_SRC_DIR
+    cd $flapp-$flapp_ver
+    ./configure --prefix=/usr/local --enable-static
+    echo -e "\n$(tput setaf 4)Starting $flapp build $(tput setaf 7)\n"
+    make -j$num_cores
+    echo -e "\n$(tput setaf 4)Starting $flapp install $(tput setaf 7)\n"
+    sudo make install
+    sudo ldconfig
 }
 
 # ===== function build any of flxmlrpc flrig, flmsg, flamp
@@ -209,33 +233,51 @@ function build_flapp() {
 flapp_ver="$1"
 flapp="$2"
 
-echo "install $flapp ver: $flapp_ver"
-
 FLAPP_SRC_DIR=$SRC_DIR/$flapp-$flapp_ver
+echo "install $flapp ver: $flapp_ver in $FLAPP_SRC_DIR"
+
 download_filename="$flapp-$flapp_ver.tar.gz"
+cd "$SRC_DIR"
 
 if [ ! -d "$FLAPP_SRC_DIR" ] ; then
-    cd "$SRC_DIR"
     sudo wget http://www.w1hkj.com/files/$flapp/$download_filename
     if [ $? -ne 0 ] ; then
         echo "$(tput setaf 1)FAILED to download file: $download_filename $(tput setaf 7)"
         exit 1
     else
-        sudo tar -zxvf $download_filename
-        sudo chown -R $USER:$USER $FLAPP_SRC_DIR
-        cd $flapp-$flapp_ver
-        ./configure --prefix=/usr/local --enable-static
-        make
-        sudo make install
-        sudo ldconfig
+        build_flapp_src
     fi
+else
+    build_flapp_src
 fi
 }
 
+# ===== function swap_size_check
+# If swap too small, change config file /etc/dphys-swapfile & exit to
+# do a reboot.
+#
+# To increase swap file size in /etc/dphys-swapfile:
+# Default   CONF_SWAPSIZE=100    102396 KBytes
+# Change to CONF_SWAPSIZE=1000  1023996 KBytes
+
+function swap_size_check() {
+    # Verify that swap size is large enough
+    swap_size=$(swapon -s | tail -n1 | expand -t 1 | tr -s '[[:space:]] ' | cut -d' ' -f3)
+    # Test if swap size is less than 1 Gig
+    if (( swap_size < 1023996 )) ; then
+        swap_config=$(grep -i conf_swapsize /etc/dphys-swapfile | cut -d"=" -f2)
+        sudo sed -i -e "/CONF_SWAPSIZE/ s/CONF_SWAPSIZE=.*/CONF_SWAPSIZE=1024/" /etc/dphys-swapfile
+
+        echo "Swap size too small for builds, changed from $swap_config to 1024 ... need to reboot."
+        exit 1
+    fi
+}
 
 # ===== main
 
 echo -e "\n\t$(tput setaf 4) Install HF programs $(tput setaf 7)\n"
+
+swap_size_check
 
 # Check for any arguments
 if (( $# != 0 )) ; then
@@ -266,19 +308,24 @@ fi
 # Verify user name
 check_user
 
+# Set number of cpu cores available
+num_cores=$(nproc --all)
+
 # If there are no command line options build everything
 
 if [[ $# -eq 1 ]] && [[ "$1" -eq "$USER" ]] ; then
     hfapp="ALL"
-
+    # Build js8call first to satisfy some wsjtx dependencies
     build_js8call "1.1.0"
-    build_wsjtx "2.0.1"
+    build_wsjtx "2.1.0"
     build_hamlib "3.3"
     build_flapp "0.1.4" flxmlrpc
-    build_flapp "1.3.43" flrig
-    build_flapp "4.0.8" flmsg
-    build_flapp "2.2.04" flamp
-    build_fldigi "4.1.03"
+    # Must build fldigi before the other apps
+    # apps rely on /usr/bin/fltk-config
+    build_fldigi "4.1.08"
+    build_flapp "1.3.48" flrig
+    build_flapp "4.0.14" flmsg
+    build_flapp "2.2.05" flamp
 else
 
     if [[ $# -ne 3 ]] ; then

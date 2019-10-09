@@ -43,6 +43,27 @@ function check_user() {
    dbgecho "using USER: $USER"
 }
 
+# ===== function swap_size_check
+# If swap too small, change config file /etc/dphys-swapfile & exit to
+# do a reboot.
+#
+# To increase swap file size in /etc/dphys-swapfile:
+# Default   CONF_SWAPSIZE=100    102396 KBytes
+# Change to CONF_SWAPSIZE=1000  1023996 KBytes
+
+function swap_size_check() {
+    # Verify that swap size is large enough
+    swap_size=$(swapon -s | tail -n1 | expand -t 1 | tr -s '[[:space:]] ' | cut -d' ' -f3)
+    # Test if swap size is less than 1 Gig
+    if (( swap_size < 1023996 )) ; then
+        swap_config=$(grep -i conf_swapsize /etc/dphys-swapfile | cut -d"=" -f2)
+        sudo sed -i -e "/CONF_SWAPSIZE/ s/CONF_SWAPSIZE=.*/CONF_SWAPSIZE=1024/" /etc/dphys-swapfile
+
+        echo "Swap size too small for builds, changed from $swap_config to 1024 ... need to reboot."
+        exit 1
+    fi
+}
+
 # ===== main
 
 # Be sure we're running as root
@@ -51,7 +72,9 @@ if [[ $EUID != 0 ]] ; then
    exit 1
 fi
 
-echo "$(date "+%Y %m %d %T %Z"): $scriptname: image install script START" >> $UDR_INSTALL_LOGFILE
+swap_size_check
+
+echo "$(date "+%Y %m %d %T %Z"): $scriptname: image install script START" | tee -a $UDR_INSTALL_LOGFILE
 echo
 
 # Check for any arguments
@@ -108,17 +131,12 @@ popd > /dev/null
 
 pushd ../xastir
 echo "$scriptname: Install Xastir"
-sudo -u "$USER" ./install.sh $USER
+sudo -u "$USER" ./xs_install.sh $USER
 popd > /dev/null
 
 pushd ../yaac
 echo "$scriptname: Install YAAC"
 sudo -u "$USER" ./install.sh $USER
-popd > /dev/null
-
-pushd ../hfprogs
-echo "$scriptname: Install HF programs"
-sudo -u "$USER" ./hf_install.sh $USER
 popd > /dev/null
 
 pushd ../dstar
@@ -131,6 +149,7 @@ echo "$scriptname: Install ardop programs"
 ./install.sh
 popd > /dev/null
 
+echo "$scriptname: Install sensor support"
 sudo apt-get -y install lm-sensors
 
 # Does DRAWS sensor file name exist?
@@ -146,6 +165,19 @@ chip "ads1015-*"
 	compute in4 ((48.7/10)+1)*@, @/((48.7/10)+1)
 EOF
 fi
+
+# Install DRAWS web manager
+pushd ../manager
+echo "$scriptname: Install DRAWS manager"
+./install.sh
+popd > /dev/null
+
+# Install HF programs last
+pushd ../hfprogs
+echo "$scriptname: Install HF programs"
+sudo -u "$USER" ./hf_install.sh $USER
+popd > /dev/null
+
 
 apt-get -y purge libreoffice* minecraft-pi scratch scratch2 fluid geany smartsim python3-thonny sense-hat sense-emu-tools python-sense-emu python3-sense-emu idle-python*
 apt-get clean

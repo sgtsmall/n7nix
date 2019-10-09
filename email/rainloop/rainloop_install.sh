@@ -14,10 +14,19 @@ lighttpdcfg_file="/etc/lighttpd/lighttpd.conf"
 
 num_cores=$(nproc --all)
 
-PHPVER="7.0"
-PKG_REQUIRE="php$PHPVER-fpm php$PHPVER php$PHPVER-curl php$PHPVER-xml php-cli php-cgi"
+# If Debian stretch: PHPVER="7.0", if Debian buster PHPVER="7.3"
+PHPVER=
 
 function dbgecho { if [ ! -z "$DEBUG" ] ; then echo "$*"; fi }
+
+# ===== function get_debian_version
+
+function get_debian_version() {
+    VER_ID=$(grep -i "version_id" /etc/*release | cut -d '=' -f2)
+    # Remove surrounding quotes
+    VER_ID=${VER_ID%\"}
+    VER_ID=${VER_ID#\"}
+}
 
 # ===== function is_pkg_installed
 
@@ -72,15 +81,15 @@ EOT
 ## Start an FastCGI server for php (needs the php5-cgi package)
 fastcgi.server += ( ".php" =>
         ((
-                "socket" => "/var/run/php/php7.0-fpm.sock",
+                "socket" => "/var/run/php/php${PHPVER}-fpm.sock",
                 "broken-scriptfilename" => "enable"
         ))
 )
 EOT
 
-    # To enable PHP in Lighttpd, must modify /etc/php/7.0/fpm/php.ini
+    # To enable PHP in Lighttpd, must modify /etc/php/$PHPVER/fpm/php.ini
     # and uncomment the line cgi.fix_pathinfo=1:
-    php_filename="/etc/php/7.0/fpm/php.ini"
+    php_filename="/etc/php/$PHPVER/fpm/php.ini"
     if [ -e "$php_filename" ] ; then
         sed -i -e '/cgi\.fix_pathinfo=/s/^;//' "$php_filename"
     else
@@ -109,8 +118,20 @@ if [[ $EUID != 0 ]] ; then
    exit 1
 fi
 
-# Test if rainloop has already been installed.
+get_debian_version
+if [ "$VER_ID" = 9 ]  ; then
+    PHPVER="7.0"
+elif [ "$VER_ID" = 10 ] ; then
+    PHPVER="7.3"
+else
+    echo "$scriptname: Need to update required php version number for Debian version ID: $VER_ID"
+    exit 1
+fi
+echo "$scriptname: Debian version: $VER_ID, PHP version: $PHPVER"
 
+PKG_REQUIRE="php$PHPVER-fpm php$PHPVER php$PHPVER-curl php$PHPVER-xml php-cli php-cgi"
+
+# Test if rainloop has already been installed.
 # Check version of rainloop installed
 
 if [ ! -e "$TARGET_DIR/rainloop" ] ; then

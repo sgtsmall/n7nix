@@ -197,14 +197,9 @@ case $APP_SELECT in
    plu)
       # Configure paclink-unix basic
       # This configures mutt & postfix
-      echo "$scriptname: Config paclink-unix"
+      echo "$scriptname: Config paclink-unix with claws, dovecot & rainloop install"
       pushd ../plu
       source ./plu_config.sh $USER $CALLSIGN
-      popd > /dev/null
-
-      # This installs claws-mail & dovecot
-      pushd ../email/claws
-      sudo -u "$USER" ./claws_install.sh $USER $CALLSIGN
       popd > /dev/null
 
       # This sets up systemd to start web server for paclink-unix
@@ -212,21 +207,31 @@ case $APP_SELECT in
       source ./pluweb_install.sh $USER
       popd > /dev/null
 
+      # configure dovecot
+      pushd ../email/claws
+      source ./dovecot_config.sh $USER
+      popd > /dev/null
+
       # This installs rainloop & lighttpd
       pushd ../email/rainloop
       source ./rainloop_install.sh
       popd > /dev/null
-   ;;
-   pluimap)
-#      echo "$scriptname: Config paclink-unix with imap"
-      echo  "$scriptname: pluimap is under development, just use 'plu'"
-      pushd ../plu
 
-#      source ./pluimap_config.sh
-     source ./plu_config.sh $USER $CALLSIGN
-
+      # This installs claws-mail
+      pushd ../email/claws
+      sudo -u "$USER" ./claws_install.sh $USER $CALLSIGN
       popd > /dev/null
    ;;
+# Take out option pluimap should all now be done in default plu install
+#   pluimap)
+#      echo "$scriptname: Config paclink-unix with imap"
+#      echo  "$scriptname: pluimap is under development, just use 'plu'"
+#      pushd ../plu
+#      source ./pluimap_config.sh
+#     source ./plu_config.sh $USER $CALLSIGN
+
+#      popd > /dev/null
+#   ;;
    messanger)
       echo "$scriptname: Config messanger appliance"
       pushd ../plu

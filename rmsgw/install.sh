@@ -179,7 +179,7 @@ cd $RMSGW_BUILD_DIR
 echo -e "$(tput setaf 4)\t Build RMS Gateway source$(tput setaf 7)"
 # Use Autotools for build
 ./autogen.sh
-./configure.sh
+./configure
 # Redirect stderr to stdout & capture to a file
 make -j$num_cores > $RMS_BUILD_FILE 2>&1
 if [ $? -ne 0 ] ; then
@@ -193,7 +193,20 @@ if [ $? -ne 0 ] ; then
   echo "$(tput setaf 1)Error during install.$(tput setaf 7)"
   exit 1
 fi
+
+# Verify that directory /etc/rmsgw does NOT exist
+# and create a symbolic link from /usr/local/etc/rmsgw to it.
+if [ ! -d /etc/rmsgw ] ; then
+    sudo ln -s /usr/local/etc/rmsgw /etc/rmsgw
+fi
+
 # rm /etc/rmsgw/stat/.*
+
+# Assume user rmsgw does not exist
+adduser --no-create-home --system rmsgw
+
+# Set proper permissions for channel & version aging files.
+sudo chown rmsgw:rmsgw /etc/rmsgw/stat
 
 echo "$(date "+%Y %m %d %T %Z"): $scriptname: RMS Gateway updated" | sudo tee -a $UDR_INSTALL_LOGFILE
 echo -e "$(tput setaf 4)RMS Gateway updated \t$(tput setaf 7)"

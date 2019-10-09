@@ -130,7 +130,6 @@ control="PCM"
 audio_display_ctrl "$control"
 printf "%s\t        L:%s\tR:%s\n" "$control" $CTRL_VAL_L $CTRL_VAL_R
 
-# Running udrc-dkms version 1.0.5 or later
 alsactrl_count=$(amixer -c $CARD scontrols | wc -l)
 
 if (( alsactrl_count >= 44 )) ; then
@@ -228,21 +227,8 @@ function check_locale() {
      fi
 }
 
-# ===== Main
-
-# Check that the ASoC driver for the AudioSense-Pi soundcard is NOT
-# loaded
-driverdir="/lib/modules/$(uname -r)/kernel/sound/soc/codecs"
-audiosense_i2c_drivername="snd-soc-tlv320aic32x4-i2c.ko"
-audiosense_codec_drivername="snd-soc-tlv320aic32x4.ko"
-
-if [ -e  "$driverdir/$audiosense_i2c_drivername" ] ; then
-    echo "chk1: $audiosense_i2c_drivername exists, Driver CONFLICT"
-fi
-
-if [ -e  "$driverdir/$audiosense_codec_drivername" ] ; then
-    echo "chk2: $audiosense_codec_drivername exists, Driver CONFLICT"
-fi
+#
+# ===== Main ===============================
 
 # Verify that aplay enumerates udrc sound card
 
@@ -271,32 +257,56 @@ piver="$(grep "Revision" $CPUINFO_FILE)"
 piver="$(echo -e "${piver##*:}" | tr -d '[[:space:]]')"
 
 case $piver in
+9020e0)
+   echo " Pi 3 Model A+, Rev 1.0, Mfg by Sony UK"
+   HAS_WIFI=true
+;;
 a01040)
-   echo " Pi 2 Model B Mfg by Sony UK"
+   echo " Pi 2 Model B, Rev 1.0, Mfg by Sony UK"
 ;;
 a01041)
-   echo " Pi 2 Model B Mfg by Sony UK"
-;;
-a21041)
-   echo " Pi 2 Model B Mfg by Embest"
-;;
-a22042)
-   echo " Pi 2 Model B with BCM2837 Mfg by Embest"
+   echo " Pi 2 Model B, Rev 1.1, Mfg by Sony UK"
 ;;
 a02082)
-   echo " Pi 3 Model B Mfg by Sony UK"
-   HAS_WIFI=true
-;;
-a22082)
-   echo " Pi 3 Model B Mfg by Embest"
-   HAS_WIFI=true
-;;
-a32082)
-   echo " Pi 3 Model B Mfg by Sony Japan"
+   echo " Pi 3 Model B, Rev 1.2, Mfg by Sony UK"
    HAS_WIFI=true
 ;;
 a020d3)
-   echo " Pi 3 Model B+ Mfg by Sony UK"
+   echo " Pi 3 Model B+, Rev 1.3, Mfg by Sony UK"
+   HAS_WIFI=true
+;;
+a21041)
+   echo " Pi 2 Model B, Rev 1.1, Mfg by Embest"
+;;
+a22042)
+   echo " Pi 2 Model B with BCM2837, Rev 1.2, Mfg by Embest"
+;;
+a22082)
+   echo " Pi 3 Model B, Rev 1.2, Mfg by Embest"
+   HAS_WIFI=true
+;;
+a32082)
+   echo " Pi 3 Model B, Rev 1.2, Mfg by Sony Japan"
+   HAS_WIFI=true
+;;
+a52082)
+   echo " Pi 3 Model B, Rev 1.2, Mfg by Stadium"
+   HAS_WIFI=true
+;;
+a22083)
+   echo " Pi 3 Model B, Rev 1.3, Mfg by Embest"
+   HAS_WIFI=true
+;;
+a03111)
+   echo " Pi 4 Model B, Rev 1.1, 1GB mem, Mfg by Sony UK"
+   HAS_WIFI=true
+;;
+b03111)
+   echo " Pi 4 Model B, Rev 1.1, 2GB mem, Mfg by Sony UK"
+   HAS_WIFI=true
+;;
+c03111)
+   echo " Pi 4 Model B, Rev 1.1, 4GB mem, Mfg by Sony UK"
    HAS_WIFI=true
 ;;
 *)
@@ -306,21 +316,11 @@ a020d3)
 ;;
 esac
 
-if [ "$HAS_WIFI" = "true" ] ; then
+if $HAS_WIFI ; then
    echo " Has WiFi"
 fi
 
 echo "==== udrc Ver ===="
-# UDRC ID EEPROM check
-# - return the product ID found in EEPROM
-#
-# 0 = no EEPROM or no device tree found
-# 1 = HAT found but not a UDRC
-# 2 = UDRC
-# 3 = UDRC II
-# 4 = DRAWS
-# 5 = 1WSpot
-
 firmware_prodfile="/sys/firmware/devicetree/base/hat/product"
 firmware_prod_idfile="/sys/firmware/devicetree/base/hat/product_id"
 firmware_vendorfile="/sys/firmware/devicetree/base/hat/vendor"
@@ -329,10 +329,10 @@ PROD_ID_NAMES=("INVALID" "INVALID" "UDRC" "UDRC II" "1WSpot")
 NWDIG_VENDOR_NAME="NW Digital Radio"
 
 id_check
-return_val=$?
-dbgecho "Return val: $return_val"
+NWDR_PROD_ID=$?
+dbgecho "id_check return val: $NWDR_PROD_ID"
 
-case $return_val in
+case $NWDR_PROD_ID in
 0)
    echo "HAT firmware not initialized or HAT not installed."
    echo -e "\n\tNo id eeprom found\n"
@@ -362,7 +362,7 @@ case $return_val in
    display_id_eeprom
 ;;
 *)
-   echo "Undefined return code: $return_val"
+   echo "Undefined return code: NWDR_PROD_ID"
 ;;
 esac
 
@@ -386,18 +386,34 @@ hostnamectl
 echo
 echo "---- modules"
 lsmod | egrep -e '(udrc|tlv320)'
-dkmsdir="/lib/modules/$(uname -r)/updates/dkms"
-echo
-if [ -d "$dkmsdir" ] ; then
-   ls -o $dkmsdir/udrc.ko $dkmsdir/tlv320aic32x4*.ko
-else
-   echo "Command 'apt-get install udrc-dkms' failed or was not run."
-fi
+
+# Running udrc-dkms version 1.0.5 or later
+# dkmsdir="/lib/modules/$(uname -r)/updates/dkms"
+#echo
+#if [ -d "$dkmsdir" ] ; then
+#   ls -o $dkmsdir/udrc.ko $dkmsdir/tlv320aic32x4*.ko
+#else
+#   echo "Command 'apt-get install udrc-dkms' failed or was not run."
+#fi
 
 echo
 echo "---- kernel"
-dpkg -l "*kernel" "udrc-dkms" | tail -n 4
+dpkg -l "*kernel" | tail -n 4
 echo
+echo "---- Codec drivers"
+# Check for ASoC driver for the TI tlv320aic32x4 codec
+
+driverdir="/lib/modules/$(uname -r)/kernel/sound/soc/codecs"
+tlv320_i2c_drivername="snd-soc-tlv320aic32x4-i2c.ko"
+tlv320_codec_drivername="snd-soc-tlv320aic32x4.ko"
+
+if [ -e  "$driverdir/$tlv320_i2c_drivername" ] ; then
+    echo "Found: $tlv320_i2c_drivername, OK"
+fi
+
+if [ -e  "$driverdir/$tlv320_codec_drivername" ] ; then
+    echo "Found: $tlv320_codec_drivername, OK"
+fi
 
 # Verify that the tlv320aic32 driver is loaded
 dirname="/proc/device-tree/soc/i2c@7e804000/tlv320aic32x4@18"
@@ -422,24 +438,6 @@ echo
 echo "---- dmesg"
 dmesg | grep -i udrc
 echo
-echo "---- compass"
-preference_file="/etc/apt/preferences.d/compass"
-if [ -f "$preference_file" ] ; then
-   echo "---- compass preference file"
-   cat "$preference_file"
-else
-   echo "Compass preference file not found: $preference_file"
-fi
-
-sources_list_file="/etc/apt/sources.list.d/compass.list"
-if [ -f "$sources_list_file" ] ; then
-   echo "---- compass apt sources list file"
-   cat "$sources_list_file"
-else
-   echo "Compass apt sources list file not found: $sources_list_file"
-fi
-echo "---- compass package files"
-ls -o /var/lib/apt/lists/archive.compasslinux.org_*
 echo
 # Check version of direwolf installed
 type -P direwolf &>/dev/null
@@ -456,42 +454,52 @@ df -h | grep -i "/dev/root"
 echo
 echo "==== boot config ===="
 tail -n 15 /boot/config.txt
-echo
-echo "---- gpsd"
-which gpsd
-if [ "$?" != 0 ] ; then
-    echo "gpsd not installed"
-else
-    gpsd -V
-fi
-systemctl --no-pager status gpsd
-echo
-echo "---- chrony"
-ls -al /dev/pps* /dev/ttySC*
 
-# Check if chronyc is installed
-type -P chronyc &>/dev/null
-if [ $? -ne 0 ] ; then
-   echo "----- No chronyc program found in path"
-else
-    echo "-- chrony sources"
-    chronyc sources
-    echo "-- chrony tracking"
-    chronyc tracking
-    echo "-- chrony sourcestats"
-    chronyc sourcestats
-fi
-echo
-echo "---- sensors"
-ls -alt /etc/sensors.d/*
-# Check if sensors command has been installed.
-type -P sensors >/dev/null 2>&1
-if [ "$?" -ne 0 ] ; then
-    echo "sensors program not installed"
+# Check for a DRAWS hat to test GPS & sensors
+if [ "$NWDR_PROD_ID" -eq 4 ] ; then
     echo
-else
-    sensors
+    echo "---- gpsd"
+    which gpsd
+    if [ "$?" != 0 ] ; then
+        echo "gpsd not installed"
+    else
+        gpsd -V
+    fi
+    systemctl --no-pager status gpsd
+    echo
+    echo "---- chrony"
+    ls -al /dev/pps* /dev/ttySC*
+
+    # Check if chronyc is installed
+    type -P chronyc &>/dev/null
+    if [ $? -ne 0 ] ; then
+        echo "----- No chronyc program found in path"
+    else
+        echo "-- chrony sources"
+        chronyc sources
+        echo "-- chrony tracking"
+        chronyc tracking
+        echo "-- chrony sourcestats"
+        chronyc sourcestats
+    fi
+    echo
+    echo "---- sensors"
+    ls -alt /etc/sensors.d/*
+    # Check if sensors command has been installed.
+    type -P sensors >/dev/null 2>&1
+    if [ "$?" -ne 0 ] ; then
+        echo "sensors program not installed"
+        echo
+    else
+        sensors
+    fi
 fi
+
+echo
+echo "---- throttle"
+vcgencmd measure_temp
+vcgencmd get_throttled
+echo
 echo "---- locale"
 sudo bash -c "$(declare -f check_locale) ; check_locale"
 

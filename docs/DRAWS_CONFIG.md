@@ -1,4 +1,4 @@
-## DRAWS Raspberry Pi image
+## UDRC / DRAWS Raspberry Pi image
 
 ### Provision the micro SD Card
 
@@ -7,12 +7,12 @@
 * [Go to the download site](http:nwdig.net/downloads) to find the current filename of the image
   * You can get the image using the following or just click on the filename using your browser.
 ```bash
-wget http://images.nwdigitalradio.com/downloads/current_beta.zip
+wget http://images.nwdigitalradio.com/downloads/current_image.zip
 ```
 
 ##### Unzip the image file
 ```bash
-unzip current_beta.zip
+unzip current_image.zip
 ```
 ##### Provision an SD card
 * At least a 16GB microSD card is recommended
@@ -30,15 +30,15 @@ and scroll down to **"Writing an image to the SD card"**
   point](https://www.raspberrypi.org/documentation/installation/installing-images/linux.md)
 
 ```
-unzip current_beta.zip
-# You will find an image file: draws_betaxx.img
+unzip current_image.zip
+# You will find an image file: nwdrxx.img
 
 # Become root
 sudo su
 apt-get install dcfldd
 
-# Use name of unzipped file ie. draws_beta10.img
-time (dcfldd if=draws_betaxx.img of=/dev/sdf bs=4M status=progress; sync)
+# Use name of unzipped file ie. nwdr14.img
+time (dcfldd if=nwdrxx.img of=/dev/sdf bs=4M status=progress; sync)
 # Doesn't hurt to run sync twice
 sync
 ```
@@ -51,10 +51,23 @@ minutes on my machine.
 
 ```
 login: pi
-passwd: nwcompass
+passwd: digiberry
 ```
 
 ### Initial Configuration
+
+#### Initial Config Summary
+
+- First boot: follow 'Welcome to Raspberry Pi' piwiz screens.
+- Second boot: run script: _app_config.sh core_
+- Third boot: Set your ALSA config
+- For packet turn on Direwolf & AX.25
+
+#### Initial Config Detail
+
+* If you are running with an attached monitor you should see the Raspbian 'Welcome to Raspberry Pi' piwiz splash screen
+  * Follow the screens as you would on any other Raspbian install.
+  * When prompted to restart the RPi please do so.
 
 ##### Configure core functionality
 
@@ -80,12 +93,19 @@ sudo su
   * direwolf
   * systemd
 
-##### First Reboot After Initial Configuration
+* **Now reboot your RPi**
 
-* **Now reboot your RPi** & [verify your installation is working
-properly](https://github.com/nwdigitalradio/n7nix/blob/master/docs/VERIFY_CONFIG.md)
-* **NOTE:** the default core config leaves AX.25 & _direwolf_ **NOT
-running** & **NOT enabled**
+* **You must set your ALSA configuration** for your particular radio at this time
+  * Also note which connector you are using as you can vary ALSA settings based on which channel you are using
+    * On a DRAWS hat left connector is left channel
+    * On a UDRC II hat mDin6 connector is right channel
+  * You also must route the AFOUT, compensated receive signal or the DISC, discriminator  receive signal with ALSA settings.
+  * If you are using the setalsa_ scripts in your local bin directory run as root to save the configuration between reboots.
+  * Verify your ALSA settings by running ```alsa-show.sh```
+
+*  [verify your installation is working properly](https://github.com/nwdigitalradio/n7nix/blob/master/docs/VERIFY_CONFIG.md)
+
+* **NOTE:** the default core config leaves AX.25 & _direwolf_ **NOT running** & **NOT enabled**
   * The default config is to run HF applications like js8call, wsjtx
   and FLdigi
   * If you are **not** interested in packet and want to run an HF app then go ahead & do that now.
@@ -98,7 +118,7 @@ sudo su
 ./ax25-start
 ```
 
-##### Second Reboot to enable packet
+##### Reboot to enable packet
 
 * Now reboot and verify by running:
 ```
@@ -138,34 +158,38 @@ sudo su
 ```
 * This will stop _direwolf_ & all the AX.25 services allowing another program to use the DRAWS sound card.
 
-#### To Enable the RPi on board audio device
+#### Enable the RPi on board audio device
 
-* As root uncomment the following line in _/boot/config.txt_
-  * ie. remove the hash character from the beginning of the line.
+* The default configuration enables the RPi on board bcm2835 sound device
+* If for some reason you want to disable the sound device then:
+  * As root comment the following line in _/boot/config.txt_
+  * ie. put a hash character at the beginning of the line.
 ```
 dtparam=audio=on
 ```
-* after a reboot verify the RPi sound device has been enumerated by
-listing all the sound playback hardware devices:
+* You need to reboot for any changes in _/boot/config.txt_ to take effect
+* after a reboot verify by listing all the sound playback hardware devices:
 ```
 aplay -l
 ```
-* Look for a response that looks similar to this:
+
+### Make your own Raspberry Pi image
+* The driver required by the NW Digital Radio is now in the main line Linux kernel (version 4.19.66)
+* To make your own Raspberry Pi image
+  * Download the lastest version of Raspbian [from here](https://www.raspberrypi.org/downloads/raspbian/)
+    * Choose one of:
+      * Raspbian Buster Lite
+      * Raspbian Buster with desktop
+      * desktop and recommended software
+* Add the following lines to the bottom of /boot/config.txt
 ```
-**** List of PLAYBACK Hardware Devices ****
-card 0: ALSA [bcm2835 ALSA], device 0: bcm2835 ALSA [bcm2835 ALSA]
-  Subdevices: 7/7
-  Subdevice #0: subdevice #0
-  Subdevice #1: subdevice #1
-  Subdevice #2: subdevice #2
-  Subdevice #3: subdevice #3
-  Subdevice #4: subdevice #4
-  Subdevice #5: subdevice #5
-  Subdevice #6: subdevice #6
-card 0: ALSA [bcm2835 ALSA], device 1: bcm2835 ALSA [bcm2835 IEC958/HDMI]
-  Subdevices: 1/1
-  Subdevice #0: subdevice #0
-card 1: udrc [udrc], device 0: Universal Digital Radio Controller tlv320aic32x4-hifi-0 []
-  Subdevices: 0/1
-  Subdevice #0: subdevice #0
+dtoverlay=
+dtoverlay=draws,alsaname=udrc
+force_turbo=1
 ```
+* If you want to ssh into your device then add an ssh file to the _/boot_ directory
+```
+touch /boot/ssh
+```
+
+* Boot the new micro SD card.

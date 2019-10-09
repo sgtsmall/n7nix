@@ -14,6 +14,12 @@ MODE_9600_ENABLE=false
 
 asoundstate_file="/var/lib/alsa/asound.state"
 
+SWITCH_FILE="/etc/ax25/packet_9600baud"
+
+if [ -e "$SWITCH_FILE" ] ; then
+    MODE_9600_ENABLE=true
+fi
+
 stateowner=$(stat -c %U $asoundstate_file)
 if [ $? -ne 0 ] ; then
    "Command 'alsactl store' will not work, file: $asoundstate_file does not exist"
@@ -25,14 +31,21 @@ fi
    echo "Command 'alsactl store' will not work unless you are root"
 fi
 
+# IN1 Discriminator output (FM function only, not all radios, 9600 baud packet)
+# IN2 Compensated receive audio (all radios, 1200 baud and slower packet)
+
 if [ "$MODE_9600_ENABLE" = "true" ] ; then
 
     echo "debug: 9600 baud enable ie. DISCOUT"
     # For 9600 baud packet only
     # Turn AFOUT off & DISCOUT on
-    # ie. Receive audio off & discriminator output on
+    # ie. Receive audio off & discriminator input on
 
     amixer -c udrc -s << EOF
+sset 'PCM' 0.0dB,0.0dB
+sset 'LO Driver Gain' 3.0dB,3.0dB
+sset 'ADC Level' -4.0dB,-4.0dB
+
 sset 'IN1_L to Left Mixer Positive Resistor' '10 kOhm'
 sset 'IN1_R to Right Mixer Positive Resistor' '10 kOhm'
 sset 'IN2_L to Left Mixer Positive Resistor' 'Off'
@@ -46,6 +59,10 @@ else
     # ie. Receive audio on & discriminator off
 
     amixer -c udrc -s << EOF
+sset 'PCM' -2.0dB,-2.0dB
+sset 'LO Driver Gain' 0.0dB,0.0dB
+sset 'ADC Level' 0.0dB,0.0dB
+
 sset 'IN1_L to Left Mixer Positive Resistor' 'Off'
 sset 'IN1_R to Right Mixer Positive Resistor' 'Off'
 sset 'IN2_L to Left Mixer Positive Resistor' '10 kOhm'
@@ -54,18 +71,11 @@ EOF
 fi
 
 amixer -c udrc -s << EOF
-#  Set default input and output levels
-sset 'PCM' -2.0dB,-2.0dB
-sset 'ADC Level' 0.0dB,0.0dB
-sset 'LO Driver Gain' 0.0dB,0.0dB
-
-# Everything after this is common to both audio channels
+# Set default input and output levels
+# Everything after this line is common to both audio channels
 
 sset 'CM_L to Left Mixer Negative Resistor' '10 kOhm'
 sset 'CM_R to Right Mixer Negative Resistor' '10 kOhm'
-
-# IN1 Discriminator output (FM function only, not all radios, 9600 baud packet)
-# IN2 Receive audio (all radios, 1200 baud packet)
 
 #  Turn off unnecessary pins
 sset 'IN1_L to Right Mixer Negative Resistor' 'Off'
